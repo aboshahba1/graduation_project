@@ -1,96 +1,99 @@
-import { userModel } from '../../../db/models/userModel.js'
-import { generateToken, verifyToken } from '../../utils/tokenFunctions.js'
-import { sendEmailService } from '../../services/mailService.js'
-import pkg from 'bcrypt'
-import { providers, systemRoles } from '../../utils/systemRoles.js'
-import { customAlphabet } from 'nanoid'
-import { OTPemailTemplate } from '../../utils/OTPemailTemplate.js'
-
+import { userModel } from "../../../db/models/userModel.js";
+import { generateToken, verifyToken } from "../../utils/tokenFunctions.js";
+import { sendEmailService } from "../../services/mailService.js";
+import pkg from "bcrypt";
+import { providers, systemRoles } from "../../utils/systemRoles.js";
+import { customAlphabet } from "nanoid";
+import { OTPemailTemplate } from "../../utils/OTPemailTemplate.js";
 
 export const register = async (req, res, next) => {
-    const {
-        Name,
-        Phone,
-        Age,
-        NationalID,
-        email,
-        Password,
-        cPassword
-    } = req.body
-
-    const isEmailDuplicate = await userModel.findOne({ Mail:email })
-    if (isEmailDuplicate) {
-        return next(new Error('email is already exist', { cause: 400 }))
-    }
-
-    if (Password !== cPassword) {
-        return next(new Error("password and cPassword don't match", { cause: 400 }))
-    }
-
-    // generate email
-
-    // Generate Confirmation Link
-    const randomOTP = customAlphabet('1234567890', 4)
-    const otp = randomOTP()
-
-    const isEmailSent = sendEmailService({
-        to: email,
-        subject: 'OTP verification',
-        message: OTPemailTemplate({ otp }),
-
-    })
-    if (!isEmailSent) {
-        return next(new Error('fail to sent reset password email', { cause: 400 }))
-    }
-
-// hash password
-const hashedPassword = pkg.hashSync(Password, +process.env.SALT_ROUNDS)
-
-
-// Initialize user object
-let user = new userModel({
+  const {
     Name,
     Phone,
     Age,
     NationalID,
-    Mail :email,
-    otp,
-    Password : hashedPassword ,
-    provider: providers.SYSTEM,
-    role:systemRoles.CLIENT
-})
-await user.save()
+    email,
+    Password,
+    isDoctor,
+    doctorSpecialization,
+    experienceNumber,
+    doctorDetails,
+    cPassword,
+  } = req.body;
 
-res.status(200).json({
-    message: 'OTP verification code is sent check your email',
-    checkOTP_API: checkOTP
-    })
-}
+  const isEmailDuplicate = await userModel.findOne({ Mail: email });
+  if (isEmailDuplicate) {
+    return next(new Error("email is already exist", { cause: 400 }));
+  }
+
+  if (Password !== cPassword) {
+    return next(
+      new Error("password and cPassword don't match", { cause: 400 })
+    );
+  }
+
+  // generate email
+
+  // Generate Confirmation Link
+  const randomOTP = customAlphabet("1234567890", 4);
+  const otp = randomOTP();
+
+  const isEmailSent = sendEmailService({
+    to: email,
+    subject: "OTP verification",
+    message: OTPemailTemplate({ otp }),
+  });
+  if (!isEmailSent) {
+    return next(new Error("fail to sent reset password email", { cause: 400 }));
+  }
+
+  // hash password
+  const hashedPassword = pkg.hashSync(Password, +process.env.SALT_ROUNDS);
+
+  // Initialize user object
+  let user = new userModel({
+    Name,
+    Phone,
+    Age,
+    NationalID,
+    Mail: email,
+    otp,
+    Password: hashedPassword,
+    provider: providers.SYSTEM,
+    role: systemRoles.CLIENT,
+    isDoctor,
+    doctorSpecialization,
+    experienceNumber,
+    doctorDetails,
+  });
+  await user.save();
+
+  res.status(200).json({
+    message: "OTP verification code is sent check your email",
+    checkOTP_API: checkOTP,
+  });
+};
 
 export const checkOTP = async (req, res, next) => {
-    const { otp, Mail } = req.body
+  const { otp, Mail } = req.body;
 
-    const user = await userModel.findOne({ Mail })
-    if (!user) {
-        return next(
-            new Error('In-valid user', { cause: 400 })
-        )
-    }
+  const user = await userModel.findOne({ Mail });
+  if (!user) {
+    return next(new Error("In-valid user", { cause: 400 }));
+  }
 
-    if (user.otp !== otp) {
-        return next(
-            new Error('In-valid OTP code', { cause: 400 })
-        )
-    }
+  if (user.otp !== otp) {
+    return next(new Error("In-valid OTP code", { cause: 400 }));
+  }
 
-    await userModel.findOneAndUpdate(
-        { Mail, isConfirmed: false },
-        { isConfirmed: true , otp : null },
-        { new: true },
-    )
+  await userModel.findOneAndUpdate(
+    { Mail, isConfirmed: false },
+    { isConfirmed: true, otp: null },
+    { new: true }
+  );
 
-    res.status(200).json({ message: 'OTP is correct try to log in' })
-}
+  res.status(200).json({ message: "OTP is correct try to log in" });
+};
 // export const confirmEmail = async (req, res, next) => {
 
 //     const { token } = req.params
@@ -114,62 +117,65 @@ export const checkOTP = async (req, res, next) => {
 // }
 
 export const login = async (req, res, next) => {
-    const { Password, Name } = req.body
+  const { Password, Name } = req.body;
 
-    const user = await userModel.findOne({ Name, isConfirmed: true })
+  const user = await userModel.findOne({ Name, isConfirmed: true });
 
-    if (!user) {
-        return next(new Error("It seems like invalid credentials OR you didn't confirm your email", { cause: 400 }))
-    }
+  if (!user) {
+    return next(
+      new Error(
+        "It seems like invalid credentials OR you didn't confirm your email",
+        { cause: 400 }
+      )
+    );
+  }
 
-    const isPasswordMatch = pkg.compareSync(Password, user.Password)
-    if (!isPasswordMatch) {
-        return next(new Error('invalid login credentials', { cause: 400 }))
-    }
+  const isPasswordMatch = pkg.compareSync(Password, user.Password);
+  if (!isPasswordMatch) {
+    return next(new Error("invalid login credentials", { cause: 400 }));
+  }
 
-    //  generate Login token
-    const token = generateToken({
-        payload: {
-            _id: user._id,
-            Mail: user.Mail,
-            role: user.role
-        },
-        signature: process.env.LOGIN_SIGN,
-        expiresIn: '100d'
-    })
+  //  generate Login token
+  const token = generateToken({
+    payload: {
+      _id: user._id,
+      Mail: user.Mail,
+      role: user.role,
+    },
+    signature: process.env.LOGIN_SIGN,
+    expiresIn: "100d",
+  });
 
-    const logedInUser = await userModel.findOneAndUpdate(
-        {Mail: user.Mail },
-        { token },
-        { new: true }
-    )
+  const logedInUser = await userModel.findOneAndUpdate(
+    { Mail: user.Mail },
+    { token },
+    { new: true }
+  );
 
+  if (logedInUser.profilePic.secure_url !== undefined) {
+    const { secure_url } = logedInUser.profilePic;
+    return res.status(200).json({
+      Message: "User loged in",
+      Name: logedInUser.Name,
+      picture: secure_url,
+      Mail: logedInUser.Mail,
+      userRole: logedInUser.role,
+      userToken: logedInUser.token,
+      NationalID: logedInUser.NationalID,
+      Age: logedInUser.Age,
+    });
+  }
 
-    if (logedInUser.profilePic.secure_url !== undefined) {
-
-        const { secure_url } = logedInUser.profilePic
-        return res.status(200).json({
-            Message: "User loged in",
-            Name: logedInUser.Name,
-            picture: secure_url,
-            Mail: logedInUser.Mail,
-            userRole: logedInUser.role,
-            userToken: logedInUser.token,
-            NationalID: logedInUser.NationalID,
-            Age:logedInUser.Age,
-        })
-    }
-
-    res.status(200).json({
-        Message: "User loged in",
-        Name: logedInUser.Name,
-        Mail: logedInUser.Mail,
-        userRole: logedInUser.role,
-        userToken: logedInUser.token,
-        NationalID: logedInUser.NationalID,
-        Age:logedInUser.Age,
-    })
-}
+  res.status(200).json({
+    Message: "User loged in",
+    Name: logedInUser.Name,
+    Mail: logedInUser.Mail,
+    userRole: logedInUser.role,
+    userToken: logedInUser.token,
+    NationalID: logedInUser.NationalID,
+    Age: logedInUser.Age,
+  });
+};
 
 // export const forgetPassword = async (req, res, next) => {
 //     const { email } = req.body
@@ -221,7 +227,6 @@ export const login = async (req, res, next) => {
 //     })
 // }
 
-
 // export const resetPassword = async (req, res, next) => {
 //     const { email, password, cPassword } = req.body
 
@@ -254,22 +259,20 @@ export const login = async (req, res, next) => {
 // }
 
 export const logout = async (req, res, next) => {
+  const { Name } = req.body;
 
-    const { Name } = req.body
+  const userCheck = await userModel.findOne({ Name });
 
-    const userCheck = await userModel.findOne({ Name })
+  if (!userCheck) {
+    return next(new Error("in-valid email", { cause: 400 }));
+  }
 
-    if (!userCheck) {
-        return next(
-            new Error('in-valid email', { cause: 400 })
-        )
-    }
-
-    const userLogedOut = await userModel.findOneAndUpdate({ Name }, { token: "" })
-    if (!userLogedOut) {
-        return next(
-            new Error('fail to update the user', { cause: 400 })
-        )
-    }
-    res.status(200).json({ Message: " user logged out" })
-}
+  const userLogedOut = await userModel.findOneAndUpdate(
+    { Name },
+    { token: "" }
+  );
+  if (!userLogedOut) {
+    return next(new Error("fail to update the user", { cause: 400 }));
+  }
+  res.status(200).json({ Message: " user logged out" });
+};
